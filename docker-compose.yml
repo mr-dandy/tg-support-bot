@@ -1,0 +1,10 @@
+services:
+  tg-support-bot:
+    build: .
+    container_name: tg-support-bot
+    environment:
+      - BOT_TOKEN=your_bot_token_here
+      - ADMIN_IDS=123456789,987654321
+    restart: unless-stopped
+    # volumes:
+    #   - ./logs:/app/logs
