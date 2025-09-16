@@ -1,25 +1,104 @@
 import os
 import logging
+import psycopg2
 from telebot import TeleBot
 from telebot.types import Message
+from dotenv import load_dotenv
+
+# Загружаем переменные из .env
+load_dotenv()
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-# Токен бота из переменной окружения
+# Токен бота и другие переменные из .env
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN не установлен в переменных окружения")
 
-bot = TeleBot(BOT_TOKEN)
-
-# ID администраторов (список через запятую в переменной окружения)
+# ID администраторов (список через запятую)
 ADMIN_IDS_STR = os.getenv('ADMIN_IDS', '')
 ADMIN_IDS = [int(admin_id.strip()) for admin_id in ADMIN_IDS_STR.split(
     ',') if admin_id.strip().isdigit()]
 if not ADMIN_IDS:
     raise ValueError("ADMIN_IDS не установлен или пустой")
+
+# Параметры подключения к PostgreSQL
+DB_HOST = os.getenv('DB_HOST')
+DB_PORT = os.getenv('DB_PORT')
+DB_NAME = os.getenv('DB_NAME')
+DB_USER = os.getenv('DB_USER')
+DB_PASSWORD = os.getenv('DB_PASSWORD')
+
+# Проверка наличия параметров БД
+if not all([DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD]):
+    raise ValueError(
+        "Не все параметры PostgreSQL установлены в переменных окружения")
+
+bot = TeleBot(BOT_TOKEN)
+
+# Инициализация БД
+
+
+def init_db():
+    conn = psycopg2.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        database=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD
+    )
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            user_id BIGINT PRIMARY KEY,
+            has_shown_suggestion BOOLEAN DEFAULT FALSE
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+
+init_db()
+
+# Функции для работы с БД
+
+
+def has_shown_suggestion(user_id: int) -> bool:
+    conn = psycopg2.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        database=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD
+    )
+    cursor = conn.cursor()
+    cursor.execute(
+        'SELECT has_shown_suggestion FROM users WHERE user_id = %s', (user_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result[0] if result else False
+
+
+def set_has_shown_suggestion(user_id: int, value: bool):
+    conn = psycopg2.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        database=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD
+    )
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO users (user_id, has_shown_suggestion)
+        VALUES (%s, %s)
+        ON CONFLICT (user_id) DO UPDATE
+        SET has_shown_suggestion = EXCLUDED.has_shown_suggestion
+    ''', (user_id, value))
+    conn.commit()
+    conn.close()
+
 
 # Словарь для отслеживания режима поддержки: {user_id: bool}
 support_mode = {}
@@ -54,8 +133,10 @@ def handle_text(message: Message):
                 message, f"Ответ отправлен пользователю {forwarded_user_id}.")
     else:
         # Обычное сообщение, если не в поддержке и не от админа
-        bot.reply_to(
-            message, "Пожалуйста, используйте /start для начала взаимодействия.")
+        if not has_shown_suggestion(user_id):
+            bot.reply_to(
+                message, "Пожалуйста, используйте /start для начала взаимодействия.")
+            set_has_shown_suggestion(user_id, True)
 
 
 if __name__ == '__main__':
