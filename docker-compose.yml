@@ -2,14 +2,14 @@ services:
   tg-support-bot:
     build: .
     container_name: tg-support-bot
-    # environment:
-    #   - BOT_TOKEN=${BOT_TOKEN}
-    #   - ADMIN_IDS=${ADMIN_IDS}
-    #   - DB_HOST=postgres
-    #   - DB_PORT=5432
-    #   - DB_NAME=${DB_NAME}
-    #   - DB_USER=${DB_USER}
-    #   - DB_PASSWORD=${DB_PASSWORD}
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - ADMIN_IDS=${ADMIN_IDS}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
     env_file:
       - .env
     restart: unless-stopped
@@ -19,10 +19,10 @@ services:
   postgres:
     image: postgres:17
     container_name: tg-support-db
-    # environment:
-    #   - POSTGRES_DB=${DB_NAME}
-    #   - POSTGRES_USER=${DB_USER}
-    #   - POSTGRES_PASSWORD=${DB_PASSWORD}
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
     env_file:
       - .env
     volumes:

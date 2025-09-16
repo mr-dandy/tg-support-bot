@@ -1,18 +1,19 @@
-import os
 import logging
+import os
 import psycopg2
 from telebot import TeleBot
 from telebot.types import Message
 from dotenv import load_dotenv
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-# Загружаем переменные из .env
+# Загружаем переменные из .env (для локального запуска)
 load_dotenv()
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-# Токен бота и другие переменные из .env
+# Токен бота и другие переменные из окружения
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN не установлен в переменных окружения")
@@ -38,9 +39,14 @@ if not all([DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD]):
 
 bot = TeleBot(BOT_TOKEN)
 
-# Инициализация БД
+# Инициализация БД с ретраями
 
 
+@retry(
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, min=4, max=10),
+    retry=retry_if_exception_type(psycopg2.OperationalError)
+)
 def init_db():
     conn = psycopg2.connect(
         host=DB_HOST,
@@ -65,6 +71,11 @@ init_db()
 # Функции для работы с БД
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=5),
+    retry=retry_if_exception_type(psycopg2.OperationalError)
+)
 def has_shown_suggestion(user_id: int) -> bool:
     conn = psycopg2.connect(
         host=DB_HOST,
@@ -81,6 +92,11 @@ def has_shown_suggestion(user_id: int) -> bool:
     return result[0] if result else False
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=5),
+    retry=retry_if_exception_type(psycopg2.OperationalError)
+)
 def set_has_shown_suggestion(user_id: int, value: bool):
     conn = psycopg2.connect(
         host=DB_HOST,
@@ -137,6 +153,7 @@ def handle_text(message: Message):
             bot.reply_to(
                 message, "Пожалуйста, используйте /start для начала взаимодействия.")
             set_has_shown_suggestion(user_id, True)
+        # После первого сообщения вне поддержки игнорируем дальнейшие, не повторяя предложение
 
 
 if __name__ == '__main__':
